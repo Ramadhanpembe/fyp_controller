@@ -16,8 +16,10 @@ dependencies:
   google_fonts: ^4.0.3
   flutter_map: ^3.1.0
   latlong2: ^0.8.1
-  badges: ^3.0.2
   http: ^0.13.5
+  firebase_core: ^2.8.0
+  cloud_firestore: ^4.4.5
+  marquee: ^2.2.3
 
 dev_dependencies:
   flutter_test:

@@ -14,19 +14,19 @@ const kLogoStyle = TextStyle(
   color: Colors.blue,
 );
 
-const kTerminalStyle = TextStyle(
-  fontSize: 24,
-  fontWeight: FontWeight.bold,
-  color: Color(0xff463f3a),
-);
-
 const kRequestTimeStyle = TextStyle(
-  fontSize: 14,
+  fontSize: 12.0,
   color: Color(0xffbcb8b1),
 );
 
 const kCounterStyle = TextStyle(
-  fontSize: 32,
+  fontSize: 20.0,
   color: Color(0xffa63c06),
   // fontWeight: FontWeight.bold,
 );
+
+/// New vals
+
+const kTrailingStyle = TextStyle(color: Colors.grey, fontSize: 13.0);
+const kTerminalStyle = TextStyle(fontSize: 16.0, color: Colors.indigo);
+const kPositionIconColor = Color(0xffd00000);

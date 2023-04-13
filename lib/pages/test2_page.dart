@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:fyp_controller/data/firestore_manager.dart';
@@ -7,27 +8,37 @@ import 'package:fyp_controller/utils/constants.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../data/resources.dart';
+import '../models/request.dart';
+import '../models/terminal.dart';
+import '../models/terminal_location.dart';
 import '../widgets/autorelease_button.dart';
 import '../widgets/controller_logo.dart';
 import '../widgets/footer.dart';
 import '../widgets/map_container.dart';
 
-class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+class Test2Page extends StatefulWidget {
+  const Test2Page({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<Test2Page> createState() => _Test2PageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _Test2PageState extends State<Test2Page> {
   bool isFocused = false;
   bool isHovered = false;
-  late MapController _mapController;
+  final listOfRoutesNotifier = ValueNotifier<List<RouteInfo>>([]);
+  final terminalRequestsNotifier = ValueNotifier<int>(0);
+  final totalRequestsNotifier = ValueNotifier<int>(0);
+  final earliestRequestAtNotifier = ValueNotifier<String>('');
+  final latestRequestAtNotifier = ValueNotifier<String>('');
+  late final MapController _mapController;
+  late final Stream<QuerySnapshot> _stream;
   late final Future<List<RouteInfo>> _routeInfo;
 
   @override
   void initState() {
     firestoreManager = FirestoreManager();
+    _stream = firestoreManager.listenOnRouteCollectionUpdates();
     _routeInfo = firestoreManager.getAvailableRoutes();
     _mapController = MapController();
     super.initState();
@@ -58,7 +69,33 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
             body: SingleChildScrollView(
-              child: _buildExpansionPanels(),
+              child: StreamBuilder(
+                stream: _stream,
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return const Center(
+                      child: Text('Error'),
+                    );
+                  }
+                  if (snapshot.connectionState == ConnectionState.waiting ||
+                      snapshot.data == null) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.only(top: 12.0),
+                        child: SizedBox(
+                          width: 32.0,
+                          height: 32.0,
+                          child: CircularProgressIndicator(
+                            color: Colors.black,
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+                  _loadUI(snapshot);
+                  return _buildExpansionPanels();
+                },
+              ),
             ),
           ),
         ),
@@ -114,8 +151,8 @@ class _HomePageState extends State<HomePage> {
                   headerBuilder: (BuildContext context, bool isExpanded) {
                     return ExpansionTile(
                       title: Text('${info.fromTerminal} - ${info.toTerminal}'),
-                      leading: _buildCircleAvatar(info),
-                      trailing: _buildTrailing(info),
+                      leading: _buildCircleAvatar(),
+                      trailing: _buildTrailing(),
                     );
                   },
                   body: Column(
@@ -165,28 +202,43 @@ class _HomePageState extends State<HomePage> {
         });
   }
 
-  Column _buildTrailing(RouteInfo info) {
+  Column _buildTrailing() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Latest: ${info.latestRequestAt!}',
-          style: kTrailingStyle,
+        ValueListenableBuilder(
+          valueListenable: latestRequestAtNotifier,
+          builder: (_, latestRequestAt, __) {
+            return Text(
+              'Latest: $latestRequestAt',
+              style: kTrailingStyle,
+            );
+          },
         ),
-        Text(
-          'Earliest: ${info.earliestRequestAt!}',
-          style: kTrailingStyle,
+        ValueListenableBuilder(
+          valueListenable: earliestRequestAtNotifier,
+          builder: (_, earliestRequestAt, __) {
+            return Text(
+              'Earliest: $earliestRequestAt',
+              style: kTrailingStyle,
+            );
+          },
         ),
       ],
     );
   }
 
-  CircleAvatar _buildCircleAvatar(RouteInfo info) {
-    return CircleAvatar(
-      backgroundColor: Colors.black,
-      foregroundColor: Colors.white,
-      child: Text(info.totalRequests.toString()),
+  ValueListenableBuilder<int> _buildCircleAvatar() {
+    return ValueListenableBuilder(
+      valueListenable: totalRequestsNotifier,
+      builder: (_, totalRequests, __) {
+        return CircleAvatar(
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          child: Text(totalRequests.toString()),
+        );
+      },
     );
   }
 
@@ -203,9 +255,14 @@ class _HomePageState extends State<HomePage> {
           ),
           Padding(
             padding: const EdgeInsets.only(bottom: 4.0, right: 16.0),
-            child: Text(
-              terminal.requests.length.toString(),
-              style: kTerminalStyle,
+            child: ValueListenableBuilder(
+              valueListenable: totalRequestsNotifier,
+              builder: (_, allRequests, __) {
+                return Text(
+                  allRequests.toString(),
+                  style: kTerminalStyle,
+                );
+              },
             ),
           ),
         ],
@@ -213,5 +270,77 @@ class _HomePageState extends State<HomePage> {
       rows.add(row);
     }
     return rows;
+  }
+
+  List<String> _getAllRequestTimesInMillisecondsSinceEpoch(List<Request> requests) {
+    List<int> requestTimes = [];
+    List<String> formattedTimes = [];
+    for (var request in requests) {
+      DateTime dateTime = DateTime.parse(request.requestTime);
+      requestTimes.add(dateTime.millisecondsSinceEpoch);
+    }
+    requestTimes.sort();
+    for (var time in requestTimes) {
+      DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(time);
+      String formatter =
+          '${dateTime.hour.toString().characters.length == 1 ? dateTime.hour.toString().padLeft(2, '0') : dateTime.hour}:${dateTime.minute.toString().characters.length == 1 ? dateTime.minute.toString().padLeft(2, '0') : dateTime.minute}';
+      formattedTimes.add(formatter);
+    }
+    return formattedTimes;
+  }
+
+  void _loadUI(AsyncSnapshot<QuerySnapshot<Object?>> snapshot) {
+    List<RouteInfo> routes = [];
+    List<Terminal> terminals = [];
+    List<Request> requests = [];
+    List<Request> terminalRequests = [];
+    final QuerySnapshot querySnapshot = snapshot.data!;
+    final List<QueryDocumentSnapshot> routeDocs = querySnapshot.docs;
+
+    for (var routeDoc in routeDocs) {
+      final CollectionReference terminalColRef = routeDoc.reference.collection('terminals');
+      terminalColRef.snapshots().listen((terminalSnapshot) {
+        final List<QueryDocumentSnapshot> terminalDocs = terminalSnapshot.docs;
+        for (var terminalDoc in terminalDocs) {
+          terminals.add(_getTerminal(terminalDoc));
+          final CollectionReference requestColRef = terminalDoc.reference.collection('requests');
+          requestColRef.snapshots().listen((requestSnapshot) {
+            final List<QueryDocumentSnapshot> requestDocs = requestSnapshot.docs;
+            for (var requestDoc in requestDocs) {
+              requests.add(Request(requestTime: requestDoc['request_time']));
+              totalRequestsNotifier.value = requests.length;
+            }
+            final times = _getAllRequestTimesInMillisecondsSinceEpoch(requests);
+            earliestRequestAtNotifier.value = times.first;
+            latestRequestAtNotifier.value = times.last;
+          });
+
+          /// requests per terminal should come here
+        }
+      });
+      routes.add(_getRouteInfo(routeDoc));
+      listOfRoutesNotifier.value = routes;
+    }
+  }
+
+  RouteInfo _getRouteInfo(QueryDocumentSnapshot routeDoc) {
+    return RouteInfo(
+      reference: routeDoc.id,
+      fromTerminal: routeDoc['from_terminal'],
+      toTerminal: routeDoc['to_terminal'],
+      routeTerminals: [],
+    );
+  }
+
+  Terminal _getTerminal(QueryDocumentSnapshot terminalDoc) {
+    return Terminal(
+      terminalID: terminalDoc['terminal_id'],
+      terminalName: terminalDoc['terminal_name'],
+      terminalLocation: TerminalLocation(
+        latitude: terminalDoc['terminal_location']['terminal_latitude'],
+        longitude: terminalDoc['terminal_location']['terminal_longitude'],
+      ),
+      requests: [],
+    );
   }
 }
