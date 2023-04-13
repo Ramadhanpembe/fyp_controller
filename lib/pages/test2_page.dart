@@ -256,12 +256,13 @@ class _Test2PageState extends State<Test2Page> {
           Padding(
             padding: const EdgeInsets.only(bottom: 4.0, right: 16.0),
             child: ValueListenableBuilder(
-              valueListenable: totalRequestsNotifier,
+              valueListenable: terminalRequestsNotifier,
               builder: (_, allRequests, __) {
                 return Text(
                   allRequests.toString(),
                   style: kTerminalStyle,
                 );
+                return Container();
               },
             ),
           ),
@@ -289,11 +290,9 @@ class _Test2PageState extends State<Test2Page> {
     return formattedTimes;
   }
 
-  void _loadUI(AsyncSnapshot<QuerySnapshot<Object?>> snapshot) {
-    List<RouteInfo> routes = [];
-    List<Terminal> terminals = [];
+  void _loadUI(AsyncSnapshot<QuerySnapshot<Object?>> snapshot) async {
     List<Request> requests = [];
-    List<Request> terminalRequests = [];
+    List<int> integers = [];
     final QuerySnapshot querySnapshot = snapshot.data!;
     final List<QueryDocumentSnapshot> routeDocs = querySnapshot.docs;
 
@@ -302,7 +301,6 @@ class _Test2PageState extends State<Test2Page> {
       terminalColRef.snapshots().listen((terminalSnapshot) {
         final List<QueryDocumentSnapshot> terminalDocs = terminalSnapshot.docs;
         for (var terminalDoc in terminalDocs) {
-          terminals.add(_getTerminal(terminalDoc));
           final CollectionReference requestColRef = terminalDoc.reference.collection('requests');
           requestColRef.snapshots().listen((requestSnapshot) {
             final List<QueryDocumentSnapshot> requestDocs = requestSnapshot.docs;
@@ -310,16 +308,13 @@ class _Test2PageState extends State<Test2Page> {
               requests.add(Request(requestTime: requestDoc['request_time']));
               totalRequestsNotifier.value = requests.length;
             }
+            integers.add(requestDocs.length);
             final times = _getAllRequestTimesInMillisecondsSinceEpoch(requests);
             earliestRequestAtNotifier.value = times.first;
             latestRequestAtNotifier.value = times.last;
           });
-
-          /// requests per terminal should come here
         }
       });
-      routes.add(_getRouteInfo(routeDoc));
-      listOfRoutesNotifier.value = routes;
     }
   }
 
@@ -333,6 +328,16 @@ class _Test2PageState extends State<Test2Page> {
   }
 
   Terminal _getTerminal(QueryDocumentSnapshot terminalDoc) {
+    final CollectionReference requestColRef = terminalDoc.reference.collection('requests');
+    requestColRef.snapshots().listen((querySnapshot) {
+      final List<QueryDocumentSnapshot> requestDocs = querySnapshot.docs;
+      List<Request> requests = [];
+      for (var requestDoc in requestDocs) {
+        requests.add(Request(
+          requestTime: requestDoc['request_time'],
+        ));
+      }
+    });
     return Terminal(
       terminalID: terminalDoc['terminal_id'],
       terminalName: terminalDoc['terminal_name'],
