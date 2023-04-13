@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -26,7 +27,6 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   bool isFocused = false;
   bool isHovered = false;
-  final totalRequestsNotifier = ValueNotifier<int>(0);
   final earliestRequestAtNotifier = ValueNotifier<String>('');
   final latestRequestAtNotifier = ValueNotifier<String>('');
   late final MapController _mapController;
@@ -136,6 +136,8 @@ class _HomePageState extends State<HomePage> {
                 });
               },
               children: routeInfo.map<ExpansionPanel>((RouteInfo info) {
+                Timer.periodic(const Duration(seconds: 1),
+                    (timer) => firestoreManager.listenForAllRouteRequestUpdates(info.reference));
                 for (var routeDoc in routeDocs) {
                   if (routeDoc.id == info.reference) {
                     log(info.reference);
@@ -191,7 +193,6 @@ class _HomePageState extends State<HomePage> {
                                   ),
                                 );
                               }
-
                               return Container();
                             },
                           ),
@@ -205,7 +206,7 @@ class _HomePageState extends State<HomePage> {
                   headerBuilder: (context, isExpanded) {
                     return const Text('');
                   },
-                  body: const Text('Empty'),
+                  body: const Text(''),
                 );
               }).toList(),
             );
@@ -243,9 +244,9 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  ValueListenableBuilder<int> _buildCircleAvatar() {
+  ValueListenableBuilder _buildCircleAvatar() {
     return ValueListenableBuilder(
-      valueListenable: totalRequestsNotifier,
+      valueListenable: firestoreManager.totalRequestsNotifier,
       builder: (_, totalRequests, __) {
         return CircleAvatar(
           backgroundColor: Colors.black,
@@ -327,7 +328,6 @@ class _HomePageState extends State<HomePage> {
             final List<QueryDocumentSnapshot> requestDocs = requestSnapshot.docs;
             for (var requestDoc in requestDocs) {
               requests.add(Request(requestTime: requestDoc['request_time']));
-              totalRequestsNotifier.value = requests.length;
             }
             final times = _getAllRequestTimesInMillisecondsSinceEpoch(requests);
             earliestRequestAtNotifier.value = times.first;

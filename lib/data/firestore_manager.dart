@@ -13,11 +13,13 @@ import '../utils/data.dart';
 
 class FirestoreManager {
   late final FirebaseFirestore _db;
+  late final ValueNotifier totalRequestsNotifier;
   FirestoreManager() {
     _init();
   }
   void _init() {
     _db = FirebaseFirestore.instance;
+    totalRequestsNotifier = ValueNotifier<int>(0);
   }
 
   // this method is designed to work with sampled data that do not change with time
@@ -76,6 +78,25 @@ class FirestoreManager {
     });
     // return _db.collection('routes').doc(routeRef).collection('terminals').snapshots();
     return requestStream;
+  }
+
+  // this method must have a routeID
+  listenForAllRouteRequestUpdates(String routeID) async {
+    List<Request> requests = [];
+    final CollectionReference terminalColRef =
+        _db.collection('routes').doc(routeID).collection('terminals');
+    final QuerySnapshot querySnapshot = await terminalColRef.get();
+    final List<QueryDocumentSnapshot> terminalDocs = querySnapshot.docs;
+    for (var terminalDoc in terminalDocs) {
+      final CollectionReference requestColRef = terminalDoc.reference.collection('requests');
+      final QuerySnapshot qs = await requestColRef.get();
+      final List<QueryDocumentSnapshot> requestDocs = qs.docs;
+      for (var req in requestDocs) {
+        requests.add(Request(requestTime: req['request_time']));
+      }
+    }
+    totalRequestsNotifier.value = requests.length;
+    return requests.length;
   }
 
   // this works perfectly
