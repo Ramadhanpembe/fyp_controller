@@ -314,7 +314,6 @@ class _HomePageState extends State<HomePage> {
 
   void _loadUI(AsyncSnapshot<QuerySnapshot<Object?>> snapshot) async {
     List<Request> requests = [];
-    List<int> integers = [];
     final QuerySnapshot querySnapshot = snapshot.data!;
     final List<QueryDocumentSnapshot> routeDocs = querySnapshot.docs;
 
@@ -330,7 +329,6 @@ class _HomePageState extends State<HomePage> {
               requests.add(Request(requestTime: requestDoc['request_time']));
               totalRequestsNotifier.value = requests.length;
             }
-            integers.add(requestDocs.length);
             final times = _getAllRequestTimesInMillisecondsSinceEpoch(requests);
             earliestRequestAtNotifier.value = times.first;
             latestRequestAtNotifier.value = times.last;
