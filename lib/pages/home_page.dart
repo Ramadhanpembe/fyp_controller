@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:developer';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +10,7 @@ import 'package:fyp_controller/utils/constants.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../data/resources.dart';
+import '../models/driver_info.dart';
 import '../models/request.dart';
 import '../widgets/autorelease_button.dart';
 import '../widgets/controller_logo.dart';
@@ -56,12 +56,14 @@ class _HomePageState extends State<HomePage> {
               leadingWidth: MediaQuery.of(context).size.width * 0.15,
               toolbarHeight: 70.0,
               actions: [
-                AutoreleaseButton(
-                  isFocused: isHovered,
-                  onHover: (val) {
-                    setState(() {
-                      (val ?? false) ? isHovered = true : isHovered = false;
-                    });
+                StatefulBuilder(
+                  builder: (context, StateSetter state) {
+                    return AutoreleaseButton(
+                      isFocused: isHovered,
+                      onHover: (val) {
+                        state(() => (val ?? false) ? isHovered = true : isHovered = false);
+                      },
+                    );
                   },
                 ),
               ],
@@ -103,12 +105,14 @@ class _HomePageState extends State<HomePage> {
             fit: StackFit.expand,
             children: [
               MapContainer(mapController: _mapController, location: officeLocation),
-              Footer(
-                isFocused: isFocused,
-                onHover: (focus) {
-                  setState(() {
-                    focus ? isFocused = true : isFocused = false;
-                  });
+              StatefulBuilder(
+                builder: (context, state) {
+                  return Footer(
+                    isFocused: isFocused,
+                    onHover: (focus) {
+                      state(() => focus ? isFocused = true : isFocused = false);
+                    },
+                  );
                 },
               )
             ],
@@ -140,7 +144,6 @@ class _HomePageState extends State<HomePage> {
                     (timer) => firestoreManager.listenForAllRouteRequestUpdates(info.reference));
                 for (var routeDoc in routeDocs) {
                   if (routeDoc.id == info.reference) {
-                    log(info.reference);
                     final CollectionReference terminalColRef =
                         routeDoc.reference.collection('terminals');
                     return ExpansionPanel(
@@ -187,7 +190,9 @@ class _HomePageState extends State<HomePage> {
                                   child: SizedBox(
                                     width: double.infinity,
                                     child: ElevatedButton(
-                                      onPressed: () {},
+                                      onPressed: () {
+                                        _displayDriverList(info);
+                                      },
                                       child: const Text('RELEASE BUS'),
                                     ),
                                   ),
@@ -336,5 +341,75 @@ class _HomePageState extends State<HomePage> {
         }
       });
     }
+  }
+
+  void _displayDriverList(RouteInfo info) {
+    showDialog(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text(
+              'Choose driver to release to:',
+              style: TextStyle(
+                fontSize: 22.0,
+                fontWeight: FontWeight.bold,
+                color: Colors.indigo,
+              ),
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20.0),
+            ),
+            content: SizedBox(
+              width: 270.0,
+              height: 250.0,
+              child: FutureBuilder(
+                future: firestoreManager.getDriverInfo(info),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting ||
+                      snapshot.data == null) {
+                    return const Center(
+                      child: Text('Loading...'),
+                    );
+                  }
+                  if (snapshot.data!.isEmpty) {
+                    return const Center(
+                      child: Text('Empty'),
+                    );
+                  }
+                  List<DriverInfo> driverInfo = snapshot.data!;
+                  return ListView.builder(
+                    itemCount: driverInfo.length,
+                    itemBuilder: (context, index) {
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.black,
+                          foregroundColor: Colors.white,
+                          child: Text(
+                            driverInfo[index].username.characters.first.toUpperCase(),
+                            style: const TextStyle(fontSize: 22.0),
+                          ),
+                        ),
+                        visualDensity: VisualDensity.compact,
+                        title: Text(driverInfo[index].username),
+                        subtitle: Text(driverInfo[index].phone),
+                        onTap: () async {
+                          await firestoreManager.sendNotification(driverInfo[index].phone);
+                          if (mounted) {
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Center(child: Text('The driver has been notified!!')),
+                              ),
+                            );
+                          }
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          );
+        });
   }
 }

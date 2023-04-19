@@ -2,27 +2,35 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:fyp_controller/models/request.dart';
 import 'package:fyp_controller/models/route_info.dart';
 import 'package:fyp_controller/models/terminal_location.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../models/driver_info.dart';
 import '../models/terminal.dart';
 import '../utils/data.dart';
 
 class FirestoreManager {
+  /// Declares firestore databases.
   late final FirebaseFirestore _db;
+
+  /// Notifies about the total requests per route.
+  /// It used to display the value on the [CircleAvatar] of each route
   late final ValueNotifier totalRequestsNotifier;
   FirestoreManager() {
     _init();
   }
+
+  /// Initializes firestore database and the [totalRequestsNotifier].
   void _init() {
     _db = FirebaseFirestore.instance;
     totalRequestsNotifier = ValueNotifier<int>(0);
   }
 
-  // this method is designed to work with sampled data that do not change with time
+  @Deprecated(
+      '[locations] collection will be deleted from the database since all driver locations are map objects within the driver collection. This method is asynchronous and is undesired, [Stream] will need to be returned in order to get the live location of each driver.')
   Future<List<LatLng>> getExistingDriverLocations() async {
     List<LatLng> positions = [];
     await _db.collection('locations').get().then((querySnapshot) {
@@ -33,8 +41,15 @@ class FirestoreManager {
     return positions;
   }
 
-  // this is the method to be used in production
-  Future<List<LatLng>> listenOnDriverLocationUpdates() async {
+  /// The return of this method should be listen inside [StreamBuilder] in order to get the
+  /// real-time driver locations updates.
+  Stream<QuerySnapshot> listenOnDriverLocationUpdates() {
+    return _db.collection('drivers').snapshots();
+  }
+
+  @Deprecated(
+      'This method return future from the locations table. [Future] is undesired for the real time updates and [locations] collection will finally be deleted.')
+  Future<List<LatLng>> getDriverLocationUpdates() async {
     List<LatLng> positions = [];
     List<String> documentIDs = [];
     await _db.collection('locations').get().then((querySnapshot) {
@@ -51,12 +66,15 @@ class FirestoreManager {
     return positions;
   }
 
+  /// The return of this method is called in [StreamBuilder] to update the values of
+  /// [earliestRequestAtNotifier], [latestRequestAtNotifier] and [requestsPerTerminal].
   Stream<QuerySnapshot> listenOnRouteCollectionUpdates() {
     final CollectionReference routeColRef = _db.collection('routes');
     return routeColRef.snapshots();
   }
 
-  // might need to delete this later as it has no usage so far
+  @Deprecated(
+      'This method is not working correctly. It should be avoided where possible. It currently has no usage within the system.')
   Stream<QuerySnapshot> listenOnRequestCollectionUpdates() {
     Stream<QuerySnapshot> requestStream = const Stream.empty();
     final CollectionReference routeColRef = _db.collection('routes');
@@ -80,8 +98,57 @@ class FirestoreManager {
     return requestStream;
   }
 
-  // this method must have a routeID
-  listenForAllRouteRequestUpdates(String routeID) async {
+  /// This method returns a [Future] List of [DriverInfo] objects from the database.
+  /// It is used with [CircleAvatar] and [ListView.builder] to fetch the driver information when
+  /// a controller tries to release a bus.
+  Future<List<DriverInfo>> getDriverInfo(RouteInfo info) async {
+    List<DriverInfo> driverInfo = [];
+    final CollectionReference driverColRef = _db.collection('drivers');
+    final QuerySnapshot querySnapshot = await driverColRef.get();
+    final List<QueryDocumentSnapshot> driverDocs = querySnapshot.docs;
+    for (var driverDoc in driverDocs) {
+      if (driverDoc['route']['to_terminal'] == info.toTerminal &&
+          driverDoc['route']['from_terminal'] == info.fromTerminal) {
+        driverInfo.add(DriverInfo(
+          username: driverDoc['username'],
+          phone: driverDoc['login']['phone'],
+          fromTerminal: driverDoc['route']['from_terminal'],
+          toTerminal: driverDoc['route']['to_terminal'],
+          latitude: driverDoc['location']['latitude'],
+          longitude: driverDoc['location']['longitude'],
+        ));
+      }
+    }
+    return driverInfo;
+  }
+
+  // here the driverID should be the same as the driver document reference ID
+  /// This method is used to send notification to a single selected driver's device
+  /// The [phone] parameter passed is used to identify a unique driver from a collection of
+  /// drivers.
+  /// It is assumed and emphasized that a [phone] number should only be used once.
+  Future<void> sendNotification(String phone) async {
+    final CollectionReference driverColRef = _db.collection('drivers');
+    final QuerySnapshot querySnapshot = await driverColRef.get();
+    final List<QueryDocumentSnapshot> driverDocs = querySnapshot.docs;
+
+    for (var driverDoc in driverDocs) {
+      if (driverDoc['login']['phone'] == phone) {
+        final CollectionReference messageColRef = driverDoc.reference.collection('messages');
+        final DocumentReference messageID =
+            messageColRef.doc('@${DateTime.now().millisecondsSinceEpoch}@');
+        messageID.set({
+          'message_id': DateTime.now().toString(),
+          'title': 'Hello ${driverDoc['username']},',
+          'body': 'You\'ve got some requests along the way! Will you ride them?',
+        });
+      }
+    }
+  }
+
+  /// This method will be executed periodically, to fetch the updates on the total requests per
+  /// route. It updates the value of [totalRequestsNotifier] used with the [CircleAvatar] of route.
+  void listenForAllRouteRequestUpdates(String routeID) async {
     List<Request> requests = [];
     final CollectionReference terminalColRef =
         _db.collection('routes').doc(routeID).collection('terminals');
@@ -96,10 +163,10 @@ class FirestoreManager {
       }
     }
     totalRequestsNotifier.value = requests.length;
-    return requests.length;
+    // return requests.length;
   }
 
-  // this works perfectly
+  /// Returns a future of list of [Request] and used privately within [getAvailableRoutes] method.
   Future<List<Request>> _getRequestsPerTerminal(
       String routeReference, String terminalReference) async {
     List<Request> terminalRequests = [];
@@ -115,6 +182,8 @@ class FirestoreManager {
     return terminalRequests;
   }
 
+  /// Returns a list of [String] of timestamps and used privately within [getAvailableRoutes]
+  /// method.
   List<String> _getAllRequestTimesInMillisecondsSinceEpoch(List<Request> requests) {
     List<int> requestTimes = [];
     List<String> formattedTimes = [];
@@ -132,6 +201,8 @@ class FirestoreManager {
     return formattedTimes;
   }
 
+  /// Returns a future of list of [RouteInfo] and used to build [ExpansionPanel] list of all
+  /// available routes.
   Future<List<RouteInfo>> getAvailableRoutes() async {
     List<RouteInfo> routeInfo = [];
     List<Terminal> terminals = [];
@@ -182,6 +253,8 @@ class FirestoreManager {
 
   // create route to the database
   // Note: this method belongs to the ADMIN PANEL, I placed it here just to add the basic route that I need to display during the signup process
+  /// This method belongs to the [AdminPanel] which is yet to be built.
+  @Deprecated('This method belongs to the [AdminPanel] which is yet to be built')
   void createRoute({required String routeID}) async {
     final CollectionReference routesColRef = _db.collection('routes');
     final DocumentReference mainDocRef = routesColRef.doc(routeID);

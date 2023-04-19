@@ -1,0 +1,18 @@
+{
+  "projects": {
+    "default": "fyp-controller"
+  },
+  "targets": {
+    "fyp-controller": {
+      "hosting": {
+        "fyp_controller": [
+          "fyp-controllerapp"
+        ],
+        "fyp_passenger": [
+          "fyp-passenger"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

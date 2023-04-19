@@ -4,6 +4,7 @@ import 'package:fyp_controller/firebase_options.dart';
 import 'package:fyp_controller/pages/home_page.dart';
 
 void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const MyApp());
 }

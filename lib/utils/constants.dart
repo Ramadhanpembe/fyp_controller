@@ -25,8 +25,8 @@ const kCounterStyle = TextStyle(
   // fontWeight: FontWeight.bold,
 );
 
-/// New vals
+/// New values
 
 const kTrailingStyle = TextStyle(color: Colors.grey, fontSize: 13.0);
 const kTerminalStyle = TextStyle(fontSize: 16.0, color: Colors.indigo);
-const kPositionIconColor = Color(0xffd00000);
+const kPositionIconColor = Colors.green;
