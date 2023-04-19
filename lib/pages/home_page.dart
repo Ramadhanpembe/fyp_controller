@@ -32,6 +32,8 @@ class _HomePageState extends State<HomePage> {
   late final MapController _mapController;
   late final Stream<QuerySnapshot> _stream;
   late final Future<List<RouteInfo>> _routeInfo;
+  final fromTerminalLocation = LatLng(-6.7783608, 39.2445853);
+  final toTerminalLocation = LatLng(-6.7877519, 39.2138601);
 
   @override
   void initState() {
@@ -44,7 +46,6 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final officeLocation = LatLng(-6.7789659, 39.2525232);
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -104,7 +105,11 @@ class _HomePageState extends State<HomePage> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              MapContainer(mapController: _mapController, location: officeLocation),
+              MapContainer(
+                mapController: _mapController,
+                fromTerminalLocation: fromTerminalLocation,
+                toTerminalLocation: toTerminalLocation,
+              ),
               StatefulBuilder(
                 builder: (context, state) {
                   return Footer(

@@ -20,6 +20,8 @@ dependencies:
   firebase_core: ^2.8.0
   cloud_firestore: ^4.4.5
   marquee: ^2.2.3
+  geolocator: ^9.0.2
+  flutter_map_tappable_polyline: ^4.0.0+1
 
 dev_dependencies:
   flutter_test:

@@ -71,7 +71,7 @@ class Footer extends StatelessWidget {
   }
 
   Future<http.Response> _getCopyRightsData() async {
-    var url = Uri.parse('$tomtomUrl/2/copyrights?key=$apiKey');
+    var url = Uri.parse('$tomtomMapUrl/2/copyrights?key=$apiKey');
     return await http.get(url);
   }
 }

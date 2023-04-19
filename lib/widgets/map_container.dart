@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_tappable_polyline/flutter_map_tappable_polyline.dart';
+import 'package:fyp_controller/data/map_manager.dart';
 import 'package:fyp_controller/data/resources.dart';
 import 'package:fyp_controller/models/driver_location.dart';
 import 'package:latlong2/latlong.dart';
@@ -11,11 +13,13 @@ class MapContainer extends StatefulWidget {
   const MapContainer({
     super.key,
     required this.mapController,
-    required this.location,
+    required this.fromTerminalLocation,
+    required this.toTerminalLocation,
   });
 
   final MapController mapController;
-  final LatLng location;
+  final LatLng fromTerminalLocation;
+  final LatLng toTerminalLocation;
 
   @override
   State<MapContainer> createState() => _MapContainerState();
@@ -23,10 +27,21 @@ class MapContainer extends StatefulWidget {
 
 class _MapContainerState extends State<MapContainer> {
   late final Stream<QuerySnapshot> _locationStream;
+  List<LatLng> _routeCoordinates = [];
+  late final _fromTerminalLocation = widget.fromTerminalLocation;
+  late final _toTerminalLocation = widget.toTerminalLocation;
+
+  void _getRouteCoordinates() async {
+    _routeCoordinates = await MapManager.calculateRoute(
+        startPosition: _fromTerminalLocation, endPosition: _toTerminalLocation);
+    _routeCoordinates.insert(0, _fromTerminalLocation);
+    _routeCoordinates.add(_toTerminalLocation);
+  }
 
   @override
   void initState() {
     _locationStream = firestoreManager.listenOnDriverLocationUpdates();
+    _getRouteCoordinates();
     super.initState();
   }
 
@@ -37,15 +52,15 @@ class _MapContainerState extends State<MapContainer> {
       child: FlutterMap(
         mapController: widget.mapController,
         options: MapOptions(
-          center: widget.location,
-          zoom: 13,
+          center: _fromTerminalLocation,
+          zoom: 15,
           keepAlive: true,
           scrollWheelVelocity: 0.001,
           enableScrollWheel: true,
         ),
         children: [
           TileLayer(
-            urlTemplate: '$tomtomUrl/1/tile/basic/main/{z}/{x}/{y}.png?key=$apiKey',
+            urlTemplate: '$tomtomMapUrl/1/tile/basic/main/{z}/{x}/{y}.png?key=$apiKey',
             additionalOptions: const {'apiKey': apiKey},
           ),
           StreamBuilder(
@@ -76,12 +91,31 @@ class _MapContainerState extends State<MapContainer> {
           MarkerLayer(
             markers: [
               _buildMarker(
-                point: widget.location,
-                color: Colors.black,
+                point: _fromTerminalLocation,
+                color: Colors.red[600],
+                icon: Icons.my_location,
+                size: 48.0,
+              ),
+              _buildMarker(
+                point: _toTerminalLocation,
+                color: Colors.red[600],
                 icon: Icons.my_location,
                 size: 48.0,
               ),
             ],
+          ),
+          TappablePolylineLayer(
+            polylineCulling: true,
+            pointerDistanceTolerance: 20,
+            polylines: [
+              TaggedPolyline(
+                tag: 'test_polyline',
+                points: _routeCoordinates,
+                color: Colors.red[600],
+                strokeWidth: 7.0,
+              ),
+            ],
+            onTap: (polylines, tapPosition) {},
           ),
         ],
       ),

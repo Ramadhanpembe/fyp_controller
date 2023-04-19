@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 const String apiKey = '3cXtVN0gTScAEcEB6SMnKCM09OVBzTth';
-const String tomtomUrl = 'https://api.tomtom.com/map';
+const String tomtomMapUrl = 'https://api.tomtom.com/map';
+const String tomtomRoutingUrl = 'https://api.tomtom.com/routing';
 
 const kCopyrightStyle = TextStyle(
   fontSize: 14,
