@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
 class MapManager {
-  static Future<List<LatLng>> calculateRoute(
+  Future<List<LatLng>> calculateRoute(
       {required LatLng startPosition, required LatLng endPosition}) async {
     List<LatLng> coordinates = [];
     String routingUrl =

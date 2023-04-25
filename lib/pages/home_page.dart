@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:fyp_controller/data/firestore_manager.dart';
+import 'package:fyp_controller/data/location_manager.dart';
+import 'package:fyp_controller/data/map_manager.dart';
 import 'package:fyp_controller/models/route_info.dart';
 import 'package:fyp_controller/notifiers/autorelease_button_notifier.dart';
 import 'package:fyp_controller/utils/constants.dart';
@@ -38,6 +40,8 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     firestoreManager = FirestoreManager();
+    mapManager = MapManager();
+    routeInfo = <RouteInfo>[];
     _stream = firestoreManager.listenOnRouteCollectionUpdates();
     _routeInfo = firestoreManager.getAvailableRoutes();
     _mapController = MapController();
@@ -109,6 +113,7 @@ class _HomePageState extends State<HomePage> {
                 mapController: _mapController,
                 fromTerminalLocation: fromTerminalLocation,
                 toTerminalLocation: toTerminalLocation,
+                routeInfo: routeInfo,
               ),
               StatefulBuilder(
                 builder: (context, state) {
@@ -137,7 +142,7 @@ class _HomePageState extends State<HomePage> {
           if (snapshot.hasData) {
             final QuerySnapshot querySnapshot = routeSnapshot.data!;
             List<QueryDocumentSnapshot> routeDocs = querySnapshot.docs;
-            List<RouteInfo> routeInfo = snapshot.data!;
+            routeInfo = snapshot.data!;
             return ExpansionPanelList(
               expansionCallback: (index, isExpanded) {
                 setState(() {
@@ -407,6 +412,7 @@ class _HomePageState extends State<HomePage> {
                               ),
                             );
                           }
+                          _checkDriverMotion(driverInfo[index]);
                         },
                       );
                     },
@@ -416,5 +422,42 @@ class _HomePageState extends State<HomePage> {
             ),
           );
         });
+  }
+
+  void _checkDriverMotion(DriverInfo driverInfo) async {
+    final Map<String, double> initialPosition =
+        await firestoreManager.getDriverCurrentLocation(driverInfo);
+    final LatLng latLng1 =
+        LatLng(initialPosition['latitude'] ?? 0.0, initialPosition['longitude'] ?? 0.0);
+    Map<String, double> finalPosition = {};
+    Future.delayed(const Duration(minutes: 5), () async {
+      finalPosition = await firestoreManager.getDriverCurrentLocation(driverInfo);
+      final LatLng latLng2 =
+          LatLng(finalPosition['latitude'] ?? 0.0, finalPosition['longitude'] ?? 0.0);
+      final double travelledDistance =
+          LocationManager.distanceBetween(latLng1: latLng1, latLng2: latLng2);
+      if (travelledDistance < 100) {
+        if (mounted) {
+          showDialog(
+              barrierDismissible: false,
+              context: context,
+              builder: (context) {
+                return AlertDialog(
+                  content: const Text(
+                    'Driver is not moving! Please choose another driver!',
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, color: Colors.black, fontSize: 16.0),
+                  ),
+                  actions: [
+                    FilledButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('OKAY'),
+                    ),
+                  ],
+                );
+              });
+        }
+      }
+    });
   }
 }

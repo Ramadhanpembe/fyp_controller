@@ -2,11 +2,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_tappable_polyline/flutter_map_tappable_polyline.dart';
-import 'package:fyp_controller/data/map_manager.dart';
 import 'package:fyp_controller/data/resources.dart';
 import 'package:fyp_controller/models/driver_location.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../models/route_info.dart';
 import '../utils/constants.dart';
 
 class MapContainer extends StatefulWidget {
@@ -15,11 +15,13 @@ class MapContainer extends StatefulWidget {
     required this.mapController,
     required this.fromTerminalLocation,
     required this.toTerminalLocation,
+    required this.routeInfo,
   });
 
   final MapController mapController;
   final LatLng fromTerminalLocation;
   final LatLng toTerminalLocation;
+  final List<RouteInfo> routeInfo;
 
   @override
   State<MapContainer> createState() => _MapContainerState();
@@ -27,21 +29,18 @@ class MapContainer extends StatefulWidget {
 
 class _MapContainerState extends State<MapContainer> {
   late final Stream<QuerySnapshot> _locationStream;
-  List<LatLng> _routeCoordinates = [];
+  late final Future<List<LatLng>> _routeCoordinates;
   late final _fromTerminalLocation = widget.fromTerminalLocation;
   late final _toTerminalLocation = widget.toTerminalLocation;
 
-  void _getRouteCoordinates() async {
-    _routeCoordinates = await MapManager.calculateRoute(
-        startPosition: _fromTerminalLocation, endPosition: _toTerminalLocation);
-    _routeCoordinates.insert(0, _fromTerminalLocation);
-    _routeCoordinates.add(_toTerminalLocation);
-  }
+  /// this is yet to be used, it will be used to update the map with some details
+  late final routeInfo = widget.routeInfo;
 
   @override
   void initState() {
     _locationStream = firestoreManager.listenOnDriverLocationUpdates();
-    _getRouteCoordinates();
+    _routeCoordinates = mapManager.calculateRoute(
+        startPosition: _fromTerminalLocation, endPosition: _toTerminalLocation);
     super.initState();
   }
 
@@ -104,18 +103,29 @@ class _MapContainerState extends State<MapContainer> {
               ),
             ],
           ),
-          TappablePolylineLayer(
-            polylineCulling: true,
-            pointerDistanceTolerance: 20,
-            polylines: [
-              TaggedPolyline(
-                tag: 'test_polyline',
-                points: _routeCoordinates,
-                color: Colors.red[600],
-                strokeWidth: 7.0,
-              ),
-            ],
-            onTap: (polylines, tapPosition) {},
+          FutureBuilder(
+            future: _routeCoordinates,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting || snapshot.data == null) {
+                return Container();
+              }
+              List<LatLng> coordinates = snapshot.data!;
+              coordinates.insert(0, _fromTerminalLocation);
+              coordinates.add(_toTerminalLocation);
+              return TappablePolylineLayer(
+                polylineCulling: true,
+                pointerDistanceTolerance: 20,
+                polylines: [
+                  TaggedPolyline(
+                    tag: 'test_polyline',
+                    points: coordinates,
+                    color: Colors.red[600],
+                    strokeWidth: 7.0,
+                  ),
+                ],
+                onTap: (polylines, tapPosition) {},
+              );
+            },
           ),
         ],
       ),

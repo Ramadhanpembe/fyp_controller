@@ -29,6 +29,21 @@ class FirestoreManager {
     totalRequestsNotifier = ValueNotifier<int>(0);
   }
 
+  Future<Map<String, double>> getDriverCurrentLocation(DriverInfo driverInfo) async {
+    final CollectionReference driverColRef = _db.collection('drivers');
+    final QuerySnapshot querySnapshot = await driverColRef.get();
+    final List<QueryDocumentSnapshot> driverDocs = querySnapshot.docs;
+    for (var driverDoc in driverDocs) {
+      if (driverDoc['login']['phone'] == driverInfo.phone) {
+        return {
+          'latitude': driverDoc['location']['latitude'],
+          'longitude': driverDoc['location']['longitude'],
+        };
+      }
+    }
+    return {};
+  }
+
   @Deprecated(
       '[locations] collection will be deleted from the database since all driver locations are map objects within the driver collection. This method is asynchronous and is undesired, [Stream] will need to be returned in order to get the live location of each driver.')
   Future<List<LatLng>> getExistingDriverLocations() async {
