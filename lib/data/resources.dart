@@ -13,3 +13,6 @@ final autoreleaseButtonNotifier = AutoreleaseButtonNotifier();
 
 /// This should retrieve all routeInfo from the database
 late List<RouteInfo> routeInfo;
+
+bool driverIsMoving = false;
+String driverPhone = '';

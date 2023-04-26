@@ -3,6 +3,8 @@ import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:fyp_controller/data/location_manager.dart';
+import 'package:fyp_controller/data/resources.dart';
 import 'package:fyp_controller/models/request.dart';
 import 'package:fyp_controller/models/route_info.dart';
 import 'package:fyp_controller/models/terminal_location.dart';
@@ -27,6 +29,66 @@ class FirestoreManager {
   void _init() {
     _db = FirebaseFirestore.instance;
     totalRequestsNotifier = ValueNotifier<int>(0);
+  }
+
+  // TODO: Currently working on this method
+  // It appears to work
+  void decrement() async {
+    if (!driverIsMoving || driverPhone.isEmpty) return;
+
+    /// we need current driver location here
+    /// which will be iterated over terminal locations
+    /// to see if it approaches any of the terminal.
+    late final QueryDocumentSnapshot driver;
+    final CollectionReference driverColRef = _db.collection('drivers');
+    final QuerySnapshot driverQuerySnapshot = await driverColRef.get();
+    final List<QueryDocumentSnapshot> driverDocs = driverQuerySnapshot.docs;
+    for (var driverDoc in driverDocs) {
+      if (driverDoc['login']['phone'] == driverPhone) {
+        driver = driverDoc;
+      }
+    }
+    late final QueryDocumentSnapshot route;
+    final CollectionReference routeColRef = _db.collection('routes');
+    final QuerySnapshot routeQuerySnapshot = await routeColRef.get();
+    final List<QueryDocumentSnapshot> routeDocs = routeQuerySnapshot.docs;
+    for (var routeDoc in routeDocs) {
+      if (routeDoc['from_terminal'] == driver['route']['from_terminal'] &&
+          routeDoc['to_terminal'] == driver['route']['to_terminal']) {
+        route = routeDoc;
+      }
+    }
+    final CollectionReference terminalColRef = route.reference.collection('terminals');
+    final QuerySnapshot terminalQuerySnapshot = await terminalColRef.get();
+    final List<QueryDocumentSnapshot> terminalDocs = terminalQuerySnapshot.docs;
+    for (var terminalDoc in terminalDocs) {
+      final driverPosition =
+          LatLng(driver['location']['latitude'], driver['location']['longitude']);
+      final terminalPosition = LatLng(terminalDoc['terminal_location']['terminal_latitude'],
+          terminalDoc['terminal_location']['terminal_longitude']);
+      final double distanceBetweenDriverAndTerminal =
+          LocationManager.distanceBetween(latLng1: driverPosition, latLng2: terminalPosition);
+      debugPrint('Distance Between Driver And Terminal::: $distanceBetweenDriverAndTerminal');
+      if (distanceBetweenDriverAndTerminal < 500.0) {
+        debugPrint('Distance is less than 20m');
+        // this part is reached successfully
+        // TODO: Now we need to get access to all requests in that specific terminal and start
+        // TODO: deleting the request, when this inside is reached.
+        final CollectionReference requestColRef = terminalDoc.reference.collection('requests');
+        final QuerySnapshot requestQuerySnapshot = await requestColRef.get();
+        final List<QueryDocumentSnapshot> requestDocs = requestQuerySnapshot.docs;
+        for (var requestDoc in requestDocs) {
+          await _db.collection('trash').add({
+            'request_id': requestDoc.id,
+            'request_delete_time': DateTime.now(),
+            'request_time': requestDoc['request_time'],
+            'request_terminal_id': terminalDoc.id,
+            'request_terminal_name': terminalDoc['terminal_name'],
+          });
+          requestDoc.reference.delete();
+        }
+      }
+    }
   }
 
   Future<Map<String, double>> getDriverCurrentLocation(DriverInfo driverInfo) async {
@@ -270,6 +332,11 @@ class FirestoreManager {
   // Note: this method belongs to the ADMIN PANEL, I placed it here just to add the basic route that I need to display during the signup process
   /// This method belongs to the [AdminPanel] which is yet to be built.
   @Deprecated('This method belongs to the [AdminPanel] which is yet to be built')
+
+  /// NOTE:
+  /// When passing the routeID, make sure to follow the reverse convention
+  /// Always start with @[to_terminal]@[from_terminal]@
+  /// Not necessarily anymore, but it might be useful, please be careful.
   void createRoute({required String routeID}) async {
     final CollectionReference routesColRef = _db.collection('routes');
     final DocumentReference mainDocRef = routesColRef.doc(routeID);

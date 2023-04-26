@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -45,7 +46,15 @@ class _HomePageState extends State<HomePage> {
     _stream = firestoreManager.listenOnRouteCollectionUpdates();
     _routeInfo = firestoreManager.getAvailableRoutes();
     _mapController = MapController();
+    Timer.periodic(const Duration(seconds: 30), (timer) {
+      _listenToDriverMovement();
+      firestoreManager.decrement();
+    });
     super.initState();
+  }
+
+  void _listenToDriverMovement() {
+    log('Is Driver Moving?: $driverIsMoving');
   }
 
   @override
@@ -412,7 +421,7 @@ class _HomePageState extends State<HomePage> {
                               ),
                             );
                           }
-                          _checkDriverMotion(driverInfo[index]);
+                          await _checkDriverMotion(driverInfo[index]);
                         },
                       );
                     },
@@ -424,29 +433,31 @@ class _HomePageState extends State<HomePage> {
         });
   }
 
-  void _checkDriverMotion(DriverInfo driverInfo) async {
+  Future<void> _checkDriverMotion(DriverInfo driverInfo) async {
     final Map<String, double> initialPosition =
         await firestoreManager.getDriverCurrentLocation(driverInfo);
     final LatLng latLng1 =
         LatLng(initialPosition['latitude'] ?? 0.0, initialPosition['longitude'] ?? 0.0);
     Map<String, double> finalPosition = {};
-    Future.delayed(const Duration(minutes: 5), () async {
+    bool isMoving = await Future.delayed(const Duration(minutes: 2), () async {
+      bool moving = true;
       finalPosition = await firestoreManager.getDriverCurrentLocation(driverInfo);
       final LatLng latLng2 =
           LatLng(finalPosition['latitude'] ?? 0.0, finalPosition['longitude'] ?? 0.0);
       final double travelledDistance =
           LocationManager.distanceBetween(latLng1: latLng1, latLng2: latLng2);
       if (travelledDistance < 100) {
+        moving = false;
         if (mounted) {
           showDialog(
               barrierDismissible: false,
               context: context,
               builder: (context) {
                 return AlertDialog(
-                  content: const Text(
-                    'Driver is not moving! Please choose another driver!',
-                    style:
-                        TextStyle(fontWeight: FontWeight.bold, color: Colors.black, fontSize: 16.0),
+                  content: Text(
+                    'Driver ${driverInfo.username} is not moving! Please choose another driver!',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, color: Colors.black, fontSize: 16.0),
                   ),
                   actions: [
                     FilledButton(
@@ -458,6 +469,10 @@ class _HomePageState extends State<HomePage> {
               });
         }
       }
+      return moving;
     });
+    log('-------------IsDriverMoving?: $isMoving');
+    driverIsMoving = isMoving;
+    driverPhone = driverInfo.phone;
   }
 }
