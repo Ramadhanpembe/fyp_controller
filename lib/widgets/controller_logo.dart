@@ -14,8 +14,8 @@ class ControllerLogo extends StatelessWidget {
         text: 'PASSENGER MANAGEMENT SYSTEM',
         style: const TextStyle(
           color: Colors.white,
-          fontWeight: FontWeight.bold,
-          fontSize: 30.0,
+          fontWeight: FontWeight.w400,
+          fontSize: 24.0,
           letterSpacing: 1.1,
         ),
         blankSpace: 40.0,

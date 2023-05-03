@@ -2,6 +2,7 @@ import 'package:fyp_controller/models/terminal.dart';
 
 class RouteInfo {
   RouteInfo({
+    this.routeID = 0,
     this.reference = 'undefined',
     required this.fromTerminal,
     required this.toTerminal,
@@ -11,6 +12,7 @@ class RouteInfo {
     this.totalRequests = 0,
     this.isExpanded = false,
   });
+  int routeID;
   String reference;
   String fromTerminal;
   String toTerminal;

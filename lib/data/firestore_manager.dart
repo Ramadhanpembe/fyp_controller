@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -12,23 +11,18 @@ import 'package:latlong2/latlong.dart';
 
 import '../models/driver_info.dart';
 import '../models/terminal.dart';
-import '../utils/data.dart';
 
 class FirestoreManager {
   /// Declares firestore databases.
   late final FirebaseFirestore _db;
 
-  /// Notifies about the total requests per route.
-  /// It used to display the value on the [CircleAvatar] of each route
-  late final ValueNotifier totalRequestsNotifier;
   FirestoreManager() {
     _init();
   }
 
-  /// Initializes firestore database and the [totalRequestsNotifier].
-  void _init() {
+  /// Initializes firestore database.
+  void _init() async {
     _db = FirebaseFirestore.instance;
-    totalRequestsNotifier = ValueNotifier<int>(0);
   }
 
   // TODO: Currently working on this method
@@ -225,7 +219,8 @@ class FirestoreManager {
 
   /// This method will be executed periodically, to fetch the updates on the total requests per
   /// route. It updates the value of [totalRequestsNotifier] used with the [CircleAvatar] of route.
-  void listenForAllRouteRequestUpdates(String routeID) async {
+  void listenForAllRouteRequestUpdates(String routeID, List<RouteInfo> routeInfo) async {
+    final int routeIndex = routeInfo.indexWhere((element) => element.reference == routeID);
     List<Request> requests = [];
     final CollectionReference terminalColRef =
         _db.collection('routes').doc(routeID).collection('terminals');
@@ -238,9 +233,11 @@ class FirestoreManager {
       for (var req in requestDocs) {
         requests.add(Request(requestTime: req['request_time']));
       }
+      final times = _getAllRequestTimesInMillisecondsSinceEpoch(requests);
+      earliestRequestAtNotifiers[routeIndex].value = times.isEmpty ? '' : times.first;
+      latestRequestAtNotifiers[routeIndex].value = times.isEmpty ? '' : times.last;
     }
-    totalRequestsNotifier.value = requests.length;
-    // return requests.length;
+    totalRequestsNotifiers[routeIndex].value = requests.length;
   }
 
   /// Returns a future of list of [Request] and used privately within [getAvailableRoutes] method.
@@ -280,16 +277,36 @@ class FirestoreManager {
 
   /// Returns a future of list of [RouteInfo] and used to build [ExpansionPanel] list of all
   /// available routes.
-  Future<List<RouteInfo>> getAvailableRoutes() async {
+  Future<List<RouteInfo>> getAvailableRoutes(String stationID) async {
     List<RouteInfo> routeInfo = [];
     List<Terminal> terminals = [];
     List<Request> requests = [];
     List<Request> terminalRequests = [];
+    List<String> routeRefs = [];
+    List<QueryDocumentSnapshot> stationRouteDocs = [];
+    final CollectionReference stationColRef = _db.collection('stations');
+    final QuerySnapshot stationQuerySnapshot = await stationColRef.get();
+    final List<QueryDocumentSnapshot> stationDocs = stationQuerySnapshot.docs;
+    for (var stationDoc in stationDocs) {
+      if (stationDoc['station_id'].toString() == stationID) {
+        for (var ref in stationDoc['route_list']) {
+          routeRefs.add(ref);
+        }
+      }
+    }
     final CollectionReference routeColRef = _db.collection('routes');
     final QuerySnapshot querySnapshot = await routeColRef.get();
     final List<QueryDocumentSnapshot> routeDocs = querySnapshot.docs;
-    for (var routeDoc in routeDocs) {
-      final CollectionReference terminalColRef = routeDoc.reference.collection('terminals');
+
+    for (var element in routeDocs) {
+      for (var routeRef in routeRefs) {
+        if (element.id == routeRef) {
+          stationRouteDocs.add(element);
+        }
+      }
+    }
+    for (var stationRouteDoc in stationRouteDocs) {
+      final CollectionReference terminalColRef = stationRouteDoc.reference.collection('terminals');
       final QuerySnapshot querySnapshot = await terminalColRef.get();
       final List<QueryDocumentSnapshot> terminalDocs = querySnapshot.docs;
 
@@ -297,16 +314,19 @@ class FirestoreManager {
         final CollectionReference requestColRef = terminalDoc.reference.collection('requests');
         final QuerySnapshot querySnapshot = await requestColRef.get();
         final List<QueryDocumentSnapshot> requestDocs = querySnapshot.docs;
-        terminalRequests = await _getRequestsPerTerminal(routeDoc.id, terminalDoc.id);
-        terminals.add(Terminal(
-          terminalID: terminalDoc['terminal_id'],
-          terminalName: terminalDoc['terminal_name'],
-          terminalLocation: TerminalLocation(
-            latitude: terminalDoc['terminal_location']['terminal_latitude'],
-            longitude: terminalDoc['terminal_location']['terminal_longitude'],
-          ),
-          requests: terminalRequests,
-        ));
+        terminalRequests = await _getRequestsPerTerminal(stationRouteDoc.id, terminalDoc.id);
+        final bool exist = _containsId(terminals, terminalDoc['terminal_id']);
+        if (!exist) {
+          terminals.add(Terminal(
+            terminalID: terminalDoc['terminal_id'],
+            terminalName: terminalDoc['terminal_name'],
+            terminalLocation: TerminalLocation(
+              latitude: terminalDoc['terminal_location']['terminal_latitude'],
+              longitude: terminalDoc['terminal_location']['terminal_longitude'],
+            ),
+            requests: terminalRequests,
+          ));
+        }
         for (var requestDoc in requestDocs) {
           requests.add(Request(
             requestTime: requestDoc['request_time'],
@@ -314,54 +334,34 @@ class FirestoreManager {
         }
       }
       List<String> requestTimes = _getAllRequestTimesInMillisecondsSinceEpoch(requests);
-      routeInfo.add(RouteInfo(
-        reference: routeDoc.id,
-        fromTerminal: routeDoc['from_terminal'],
-        toTerminal: routeDoc['to_terminal'],
-        routeTerminals: terminals,
-        totalRequests: requests.length,
-        latestRequestAt: requestTimes.last,
-        earliestRequestAt: requestTimes.first,
-      ));
+      routeInfo.add(
+        RouteInfo(
+          routeID: stationRouteDoc['route_id'],
+          reference: stationRouteDoc.id,
+          fromTerminal: stationRouteDoc['from_terminal'],
+          toTerminal: stationRouteDoc['to_terminal'],
+          routeTerminals: terminals,
+          totalRequests: requests.length,
+          latestRequestAt: requestTimes.isEmpty ? '' : requestTimes.last,
+          earliestRequestAt: requestTimes.isEmpty ? '' : requestTimes.first,
+        ),
+      );
     }
-
     return routeInfo;
   }
 
-  // create route to the database
-  // Note: this method belongs to the ADMIN PANEL, I placed it here just to add the basic route that I need to display during the signup process
-  /// This method belongs to the [AdminPanel] which is yet to be built.
-  @Deprecated('This method belongs to the [AdminPanel] which is yet to be built')
-
-  /// NOTE:
-  /// When passing the routeID, make sure to follow the reverse convention
-  /// Always start with @[to_terminal]@[from_terminal]@
-  /// Not necessarily anymore, but it might be useful, please be careful.
-  void createRoute({required String routeID}) async {
-    final CollectionReference routesColRef = _db.collection('routes');
-    final DocumentReference mainDocRef = routesColRef.doc(routeID);
-    await mainDocRef.set({
-      'from_terminal': route.fromTerminal,
-      'to_terminal': route.toTerminal,
-    });
-
-    final CollectionReference terminalColRef = mainDocRef.collection('terminals');
-    for (var terminal in route.routeTerminals) {
-      final DocumentReference terminalDocRef = terminalColRef.doc('@${terminal.terminalName}@');
-      terminalDocRef.set({
-        'terminal_id': terminal.terminalID,
-        'terminal_name': terminal.terminalName,
-        'terminal_location': {
-          'terminal_latitude': terminal.terminalLocation.latitude,
-          'terminal_longitude': terminal.terminalLocation.longitude,
-        }
-      });
-      final CollectionReference requestColRef = terminalDocRef.collection('requests');
-      for (var request in terminal.requests) {
-        final DocumentReference requestDocRef = requestColRef.doc(
-            '@${terminal.terminalName}@${DateTime.now().millisecondsSinceEpoch}@${Random.secure().nextInt(100)}@');
-        requestDocRef.set({'request_time': request.requestTime});
-      }
+  Future<List<String>> getAllStationIDs() async {
+    List<String> stationIDs = [];
+    final CollectionReference stationColRef = _db.collection('stations');
+    final QuerySnapshot querySnapshot = await stationColRef.get();
+    final List<QueryDocumentSnapshot> stationDocs = querySnapshot.docs;
+    for (var doc in stationDocs) {
+      stationIDs.add(doc['station_id'].toString());
     }
+    return stationIDs;
+  }
+
+  bool _containsId(List<Terminal> terminals, int id) {
+    return terminals.any((element) => element.terminalID == id);
   }
 }

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:fyp_controller/data/firestore_manager.dart';
 import 'package:fyp_controller/notifiers/autorelease_button_notifier.dart';
 
@@ -16,3 +17,7 @@ late List<RouteInfo> routeInfo;
 
 bool driverIsMoving = false;
 String driverPhone = '';
+
+late final List<ValueNotifier<int>> totalRequestsNotifiers;
+late final List<ValueNotifier<String>> earliestRequestAtNotifiers;
+late final List<ValueNotifier<String>> latestRequestAtNotifiers;

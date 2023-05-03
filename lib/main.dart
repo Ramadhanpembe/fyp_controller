@@ -1,7 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:fyp_controller/firebase_options.dart';
-import 'package:fyp_controller/pages/home_page.dart';
+import 'package:fyp_controller/pages/login_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,7 +22,7 @@ class MyApp extends StatelessWidget {
         ),
       ),
       home: const Scaffold(
-        body: HomePage(),
+        body: LoginPage(),
       ),
     );
   }
