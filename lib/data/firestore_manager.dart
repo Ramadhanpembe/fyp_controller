@@ -25,7 +25,6 @@ class FirestoreManager {
     _db = FirebaseFirestore.instance;
   }
 
-  // TODO: Currently working on this method
   // It appears to work
   void decrement() async {
     if (!driverIsMoving || driverPhone.isEmpty) return;
@@ -66,8 +65,6 @@ class FirestoreManager {
       if (distanceBetweenDriverAndTerminal < 500.0) {
         debugPrint('Distance is less than 20m');
         // this part is reached successfully
-        // TODO: Now we need to get access to all requests in that specific terminal and start
-        // TODO: deleting the request, when this inside is reached.
         final CollectionReference requestColRef = terminalDoc.reference.collection('requests');
         final QuerySnapshot requestQuerySnapshot = await requestColRef.get();
         final List<QueryDocumentSnapshot> requestDocs = requestQuerySnapshot.docs;
@@ -94,22 +91,11 @@ class FirestoreManager {
         return {
           'latitude': driverDoc['location']['latitude'],
           'longitude': driverDoc['location']['longitude'],
+          'timestamp': driverDoc['location']['timestamp'],
         };
       }
     }
     return {};
-  }
-
-  @Deprecated(
-      '[locations] collection will be deleted from the database since all driver locations are map objects within the driver collection. This method is asynchronous and is undesired, [Stream] will need to be returned in order to get the live location of each driver.')
-  Future<List<LatLng>> getExistingDriverLocations() async {
-    List<LatLng> positions = [];
-    await _db.collection('locations').get().then((querySnapshot) {
-      for (var docSnapshot in querySnapshot.docs) {
-        positions.add(LatLng(docSnapshot['latitude'], docSnapshot['longitude']));
-      }
-    });
-    return positions;
   }
 
   /// The return of this method should be listen inside [StreamBuilder] in order to get the
@@ -118,55 +104,11 @@ class FirestoreManager {
     return _db.collection('drivers').snapshots();
   }
 
-  @Deprecated(
-      'This method return future from the locations table. [Future] is undesired for the real time updates and [locations] collection will finally be deleted.')
-  Future<List<LatLng>> getDriverLocationUpdates() async {
-    List<LatLng> positions = [];
-    List<String> documentIDs = [];
-    await _db.collection('locations').get().then((querySnapshot) {
-      for (var docSnapshot in querySnapshot.docs) {
-        documentIDs.add(docSnapshot.id);
-      }
-    });
-    for (var documentID in documentIDs) {
-      _db.collection('locations').doc(documentID).snapshots().listen((docSnapshot) {
-        positions.add(LatLng(docSnapshot['latitude'], docSnapshot['longitude']));
-      });
-    }
-
-    return positions;
-  }
-
   /// The return of this method is called in [StreamBuilder] to update the values of
   /// [earliestRequestAtNotifier], [latestRequestAtNotifier] and [requestsPerTerminal].
   Stream<QuerySnapshot> listenOnRouteCollectionUpdates() {
     final CollectionReference routeColRef = _db.collection('routes');
     return routeColRef.snapshots();
-  }
-
-  @Deprecated(
-      'This method is not working correctly. It should be avoided where possible. It currently has no usage within the system.')
-  Stream<QuerySnapshot> listenOnRequestCollectionUpdates() {
-    Stream<QuerySnapshot> requestStream = const Stream.empty();
-    final CollectionReference routeColRef = _db.collection('routes');
-    final Stream<QuerySnapshot> routeStream = routeColRef.snapshots();
-
-    routeStream.listen((querySnapshot) {
-      final List<QueryDocumentSnapshot> routeDocs = querySnapshot.docs;
-      for (var routeDoc in routeDocs) {
-        final CollectionReference terminalColRef = routeDoc.reference.collection('terminals');
-        final Stream<QuerySnapshot> terminalStream = terminalColRef.snapshots();
-        terminalStream.listen((qs) {
-          final List<QueryDocumentSnapshot> terminalDocs = qs.docs;
-          for (var terminalDoc in terminalDocs) {
-            final CollectionReference requestColRef = terminalDoc.reference.collection('requests');
-            requestStream = requestColRef.snapshots();
-          }
-        });
-      }
-    });
-    // return _db.collection('routes').doc(routeRef).collection('terminals').snapshots();
-    return requestStream;
   }
 
   /// This method returns a [Future] List of [DriverInfo] objects from the database.
@@ -187,6 +129,7 @@ class FirestoreManager {
           toTerminal: driverDoc['route']['to_terminal'],
           latitude: driverDoc['location']['latitude'],
           longitude: driverDoc['location']['longitude'],
+          timestamp: driverDoc['location']['timestamp'],
         ));
       }
     }
@@ -233,10 +176,10 @@ class FirestoreManager {
       for (var req in requestDocs) {
         requests.add(Request(requestTime: req['request_time']));
       }
-      final times = _getAllRequestTimesInMillisecondsSinceEpoch(requests);
-      earliestRequestAtNotifiers[routeIndex].value = times.isEmpty ? '' : times.first;
-      latestRequestAtNotifiers[routeIndex].value = times.isEmpty ? '' : times.last;
     }
+    final times = _getAllRequestTimesInMillisecondsSinceEpoch(requests);
+    earliestRequestAtNotifiers[routeIndex].value = times.isEmpty ? '' : times.first;
+    latestRequestAtNotifiers[routeIndex].value = times.isEmpty ? '' : times.last;
     totalRequestsNotifiers[routeIndex].value = requests.length;
   }
 
@@ -359,6 +302,14 @@ class FirestoreManager {
       stationIDs.add(doc['station_id'].toString());
     }
     return stationIDs;
+  }
+
+  Future<QuerySnapshot> getAllRoutes() async {
+    return await _db.collection('routes').get();
+  }
+
+  Future<QuerySnapshot> getAllDrivers() async {
+    return await _db.collection('drivers').get();
   }
 
   bool _containsId(List<Terminal> terminals, int id) {

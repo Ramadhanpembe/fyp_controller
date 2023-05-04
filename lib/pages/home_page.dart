@@ -333,10 +333,14 @@ class _HomePageState extends State<HomePage> {
               child: FutureBuilder(
                 future: firestoreManager.getDriverInfo(info),
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting ||
-                      snapshot.data == null) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(
                       child: Text('Loading...'),
+                    );
+                  }
+                  if (snapshot.data == null) {
+                    return const Center(
+                      child: Text('Data is null!'),
                     );
                   }
                   if (snapshot.data!.isEmpty) {

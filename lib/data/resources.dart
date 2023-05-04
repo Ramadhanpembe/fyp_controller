@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:fyp_controller/data/firestore_manager.dart';
+import 'package:fyp_controller/data/location_manager.dart';
 import 'package:fyp_controller/notifiers/autorelease_button_notifier.dart';
 
 import '../models/route_info.dart';
@@ -7,6 +8,7 @@ import 'map_manager.dart';
 
 /// Initializes the firestore databases and its associated methods
 late FirestoreManager firestoreManager;
+late LocationManager locationManager;
 late MapManager mapManager;
 
 /// Value notifier used to notify whether the [AutoreleaseButton] is pressed or not
@@ -21,3 +23,5 @@ String driverPhone = '';
 late final List<ValueNotifier<int>> totalRequestsNotifiers;
 late final List<ValueNotifier<String>> earliestRequestAtNotifiers;
 late final List<ValueNotifier<String>> latestRequestAtNotifiers;
+
+bool isPermissionGranted = false;
