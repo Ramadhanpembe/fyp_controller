@@ -21,11 +21,6 @@ late List<RouteInfo> routeInfo;
 bool driverIsMoving = false;
 String driverPhone = '';
 
-/// new
-String notifiedDriverPhone = '';
-
-/// //////////////////
-
 late final List<ValueNotifier<int>> totalRequestsNotifiers;
 late final List<ValueNotifier<String>> earliestRequestAtNotifiers;
 late final List<ValueNotifier<String>> latestRequestAtNotifiers;
