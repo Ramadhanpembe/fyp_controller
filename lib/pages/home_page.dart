@@ -9,6 +9,7 @@ import 'package:fyp_controller/data/map_manager.dart';
 import 'package:fyp_controller/models/route_info.dart';
 import 'package:fyp_controller/notifiers/autorelease_button_notifier.dart';
 import 'package:fyp_controller/utils/constants.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../data/resources.dart';
@@ -36,33 +37,50 @@ class _HomePageState extends State<HomePage> {
   late final Future<List<RouteInfo>> _routeInfo;
   final fromTerminalLocation = LatLng(-6.7783608, 39.2445853);
   final toTerminalLocation = LatLng(-6.7877519, 39.2138601);
+  late final Position stationPosition;
+  Map<String, dynamic> notified = {};
+  String phone = '';
 
-  void _toFirestore() async {
+  Future<void> _toFirestore() async {
     List<RouteInfo> toFirestore = await firestoreManager.getAvailableRoutes(widget.stationID);
     totalRequestsNotifiers = List.generate(toFirestore.length, (index) => ValueNotifier<int>(0));
     earliestRequestAtNotifiers =
         List.generate(toFirestore.length, (index) => ValueNotifier<String>(''));
     latestRequestAtNotifiers =
         List.generate(toFirestore.length, (index) => ValueNotifier<String>(''));
+    stationPosition = await Geolocator.getCurrentPosition();
+  }
+
+  void _initNotifiers() async {
+    await _toFirestore();
   }
 
   @override
   void initState() {
-    _toFirestore();
+    _initNotifiers();
     mapManager = MapManager();
 
     _stream = firestoreManager.listenOnRouteCollectionUpdates();
     _routeInfo = firestoreManager.getAvailableRoutes(widget.stationID);
     _mapController = MapController();
-    Timer.periodic(const Duration(minutes: 130), (timer) {
-      _listenToDriverMovement();
+    Timer.periodic(const Duration(seconds: 1), (timer) async {
       firestoreManager.decrement();
+      notified = await autoNotifyDriver();
+      DriverInfo driverInfo = DriverInfo(
+          username: '',
+          phone: '',
+          fromTerminal: '',
+          toTerminal: '',
+          latitude: 0.0,
+          longitude: 0.0,
+          timestamp: '');
+      final DriverInfo info = notified['info'] ?? driverInfo;
+      if (info.phone != phone) {
+        await firestoreManager.sendNotification(info.phone);
+        phone = info.phone;
+      }
     });
     super.initState();
-  }
-
-  void _listenToDriverMovement() {
-    log('Is Driver Moving?: $driverIsMoving');
   }
 
   @override
@@ -374,7 +392,7 @@ class _HomePageState extends State<HomePage> {
                               ),
                             );
                           }
-                          await _checkDriverMotion(driverInfo[index]);
+                          await _checkManualDriverMotion(driverInfo[index]);
                         },
                       );
                     },
@@ -386,12 +404,12 @@ class _HomePageState extends State<HomePage> {
         });
   }
 
-  Future<void> _checkDriverMotion(DriverInfo driverInfo) async {
-    final Map<String, double> initialPosition =
+  Future<void> _checkManualDriverMotion(DriverInfo driverInfo) async {
+    final Map<String, dynamic> initialPosition =
         await firestoreManager.getDriverCurrentLocation(driverInfo);
     final LatLng latLng1 =
         LatLng(initialPosition['latitude'] ?? 0.0, initialPosition['longitude'] ?? 0.0);
-    Map<String, double> finalPosition = {};
+    Map<String, dynamic> finalPosition = {};
     bool isMoving = await Future.delayed(const Duration(minutes: 2), () async {
       bool moving = true;
       finalPosition = await firestoreManager.getDriverCurrentLocation(driverInfo);
@@ -427,5 +445,85 @@ class _HomePageState extends State<HomePage> {
     log('-------------IsDriverMoving?: $isMoving');
     driverIsMoving = isMoving;
     driverPhone = driverInfo.phone;
+  }
+
+  // Future<void> _checkAutoDriverMotion(DriverInfo driverInfo) async {
+  //   final Map<String, dynamic> initialPosition =
+  //       await firestoreManager.getDriverCurrentLocation(driverInfo);
+  //   final LatLng latLng1 =
+  //       LatLng(initialPosition['latitude'] ?? 0.0, initialPosition['longitude'] ?? 0.0);
+  //   Map<String, dynamic> finalPosition = {};
+  //   bool isMoving = await Future.delayed(const Duration(minutes: 2), () async {
+  //     bool moving = true;
+  //     finalPosition = await firestoreManager.getDriverCurrentLocation(driverInfo);
+  //     final LatLng latLng2 =
+  //         LatLng(finalPosition['latitude'] ?? 0.0, finalPosition['longitude'] ?? 0.0);
+  //     final double travelledDistance =
+  //         LocationManager.distanceBetween(latLng1: latLng1, latLng2: latLng2);
+  //     if (travelledDistance < 100) {
+  //       moving = false;
+  //     }
+  //     return moving;
+  //   });
+  //   log('-------------IsDriverMoving?: $isMoving');
+  //   driverIsMoving = isMoving;
+  //   driverPhone = driverInfo.phone;
+  // }
+
+  Future<Map<String, dynamic>> autoNotifyDriver() async {
+    if (!autoReleaseOnNotifier.value) return {};
+    for (int i = 0; i < totalRequestsNotifiers.length; i++) {
+      if (totalRequestsNotifiers[i].value >= 20) {
+        final QuerySnapshot routeQuerySnapshot = await firestoreManager.getAllRoutes();
+        final List<QueryDocumentSnapshot> routeDocs = routeQuerySnapshot.docs;
+        final QueryDocumentSnapshot myRouteDoc = routeDocs.elementAt(i);
+        final QuerySnapshot driverQuerySnapshot = await firestoreManager.getAllDrivers();
+        final List<QueryDocumentSnapshot> driverDocs = driverQuerySnapshot.docs;
+        final List<QueryDocumentSnapshot> requiredDriverDocs = [];
+        for (var driverDoc in driverDocs) {
+          if (driverDoc['route']['from_terminal'] == myRouteDoc['from_terminal'] &&
+              driverDoc['route']['to_terminal'] == myRouteDoc['to_terminal']) {
+            requiredDriverDocs.add(driverDoc);
+          }
+        }
+        List<QueryDocumentSnapshot> inStationDrivers = [];
+        if (isPermissionGranted) {
+          final stationPosition = await Geolocator.getCurrentPosition();
+          final stationLatLng = LatLng(stationPosition.latitude, stationPosition.longitude);
+          for (var driverDoc in requiredDriverDocs) {
+            final driverLatLng =
+                LatLng(driverDoc['location']['latitude'], driverDoc['location']['longitude']);
+            final double distanceBetween =
+                LocationManager.distanceBetween(latLng1: stationLatLng, latLng2: driverLatLng);
+            if (distanceBetween <= 9000.0) inStationDrivers.add(driverDoc);
+          }
+        }
+        List<int> timestamps = [];
+        for (var driver in inStationDrivers) {
+          final String? timestamp = driver['location']['timestamp'];
+          timestamps.add(DateTime.parse(timestamp ?? '2023-05-04').millisecondsSinceEpoch);
+        }
+        timestamps.sort();
+        final int timestampOfRequiredDriver = timestamps.isEmpty ? 0 : timestamps.first;
+        for (var driver in inStationDrivers) {
+          final String timestamps = driver['location']['timestamp'];
+          if (DateTime.parse(timestamps).millisecondsSinceEpoch == timestampOfRequiredDriver) {
+            return <String, dynamic>{
+              'bool': true,
+              'info': DriverInfo(
+                username: driver['username'],
+                phone: driver['login']['phone'],
+                fromTerminal: driver['route']['from_terminal'],
+                toTerminal: driver['route']['to_terminal'],
+                latitude: driver['location']['latitude'],
+                longitude: driver['location']['longitude'],
+                timestamp: driver['location']['timestamp'],
+              ),
+            };
+          }
+        }
+      }
+    }
+    return {};
   }
 }

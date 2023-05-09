@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "fyp-project-4ffff"
+  },
+  "targets": {
+    "fyp-project-4ffff": {
+      "hosting": {
+        "fyp_controller": [
+          "fyp-project-controller"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

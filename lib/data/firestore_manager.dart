@@ -82,7 +82,7 @@ class FirestoreManager {
     }
   }
 
-  Future<Map<String, double>> getDriverCurrentLocation(DriverInfo driverInfo) async {
+  Future<Map<String, dynamic>> getDriverCurrentLocation(DriverInfo driverInfo) async {
     final CollectionReference driverColRef = _db.collection('drivers');
     final QuerySnapshot querySnapshot = await driverColRef.get();
     final List<QueryDocumentSnapshot> driverDocs = querySnapshot.docs;

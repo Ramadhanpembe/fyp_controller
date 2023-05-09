@@ -13,12 +13,18 @@ late MapManager mapManager;
 
 /// Value notifier used to notify whether the [AutoreleaseButton] is pressed or not
 final autoreleaseButtonNotifier = AutoreleaseButtonNotifier();
+final autoReleaseOnNotifier = ValueNotifier<bool>(false);
 
 /// This should retrieve all routeInfo from the database
 late List<RouteInfo> routeInfo;
 
 bool driverIsMoving = false;
 String driverPhone = '';
+
+/// new
+String notifiedDriverPhone = '';
+
+/// //////////////////
 
 late final List<ValueNotifier<int>> totalRequestsNotifiers;
 late final List<ValueNotifier<String>> earliestRequestAtNotifiers;
