@@ -89,7 +89,7 @@ class _HomePageState extends State<HomePage> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Expanded(
-          flex: 1,
+          flex: 3,
           child: Scaffold(
             appBar: AppBar(
               leading: const ControllerLogo(),
@@ -123,7 +123,7 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
         Expanded(
-          flex: 3,
+          flex: 7,
           child: Stack(
             fit: StackFit.expand,
             children: [
