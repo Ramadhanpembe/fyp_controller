@@ -19,7 +19,7 @@ class _LoginPageState extends State<LoginPage> {
   final _controller = TextEditingController();
   List<String> stationIDs = [];
 
-  void _getAllTerminalIDs() async {
+  void _getAllStationIDs() async {
     stationIDs = await firestoreManager.getAllStationIDs();
   }
 
@@ -28,7 +28,7 @@ class _LoginPageState extends State<LoginPage> {
     routeInfo = <RouteInfo>[];
     firestoreManager = FirestoreManager();
     locationManager = LocationManager();
-    _getAllTerminalIDs();
+    _getAllStationIDs();
     super.initState();
   }
 

@@ -170,8 +170,8 @@ class _HomePageState extends State<HomePage> {
             children: routeInfo.map<ExpansionPanel>((RouteInfo info) {
               Timer.periodic(
                   const Duration(seconds: 1),
-                  (timer) =>
-                      firestoreManager.listenForAllRouteRequestUpdates(info.reference, routeInfo));
+                  (timer) => firestoreManager.listenForAllRouteRequestUpdates(
+                      info.reference, widget.stationID, routeInfo));
               for (var routeDoc in routeDocs) {
                 if (routeDoc.id == info.reference) {
                   final CollectionReference terminalColRef =
@@ -446,29 +446,6 @@ class _HomePageState extends State<HomePage> {
     driverIsMoving = isMoving;
     driverPhone = driverInfo.phone;
   }
-
-  // Future<void> _checkAutoDriverMotion(DriverInfo driverInfo) async {
-  //   final Map<String, dynamic> initialPosition =
-  //       await firestoreManager.getDriverCurrentLocation(driverInfo);
-  //   final LatLng latLng1 =
-  //       LatLng(initialPosition['latitude'] ?? 0.0, initialPosition['longitude'] ?? 0.0);
-  //   Map<String, dynamic> finalPosition = {};
-  //   bool isMoving = await Future.delayed(const Duration(minutes: 2), () async {
-  //     bool moving = true;
-  //     finalPosition = await firestoreManager.getDriverCurrentLocation(driverInfo);
-  //     final LatLng latLng2 =
-  //         LatLng(finalPosition['latitude'] ?? 0.0, finalPosition['longitude'] ?? 0.0);
-  //     final double travelledDistance =
-  //         LocationManager.distanceBetween(latLng1: latLng1, latLng2: latLng2);
-  //     if (travelledDistance < 100) {
-  //       moving = false;
-  //     }
-  //     return moving;
-  //   });
-  //   log('-------------IsDriverMoving?: $isMoving');
-  //   driverIsMoving = isMoving;
-  //   driverPhone = driverInfo.phone;
-  // }
 
   Future<Map<String, dynamic>> autoNotifyDriver() async {
     if (!autoReleaseOnNotifier.value) return {};

@@ -162,19 +162,52 @@ class FirestoreManager {
 
   /// This method will be executed periodically, to fetch the updates on the total requests per
   /// route. It updates the value of [totalRequestsNotifier] used with the [CircleAvatar] of route.
-  void listenForAllRouteRequestUpdates(String routeID, List<RouteInfo> routeInfo) async {
+  void listenForAllRouteRequestUpdates(
+      String routeID, String stationID, List<RouteInfo> routeInfo) async {
     final int routeIndex = routeInfo.indexWhere((element) => element.reference == routeID);
+    String stationName = '';
+    String routeFromTerminal = '';
+    String routeToTerminal = '';
+    final CollectionReference stationColRef = _db.collection('stations');
+    final QuerySnapshot stationQuerySnapshot = await stationColRef.get();
+    final List<QueryDocumentSnapshot> stationDocs = stationQuerySnapshot.docs;
+    for (var stationDoc in stationDocs) {
+      if (stationDoc['station_id'].toString() == stationID) {
+        stationName = stationDoc['station_name'];
+      }
+    }
+    final CollectionReference routeColRef = _db.collection('routes');
+    final QuerySnapshot routeQuerySnapshot = await routeColRef.get();
+    final List<QueryDocumentSnapshot> routeDocs = routeQuerySnapshot.docs;
+    for (var routeDoc in routeDocs) {
+      if (routeDoc.id == routeID) {
+        routeFromTerminal = routeDoc['from_terminal'];
+        routeToTerminal = routeDoc['to_terminal'];
+      }
+    }
     List<Request> requests = [];
     final CollectionReference terminalColRef =
         _db.collection('routes').doc(routeID).collection('terminals');
     final QuerySnapshot querySnapshot = await terminalColRef.get();
     final List<QueryDocumentSnapshot> terminalDocs = querySnapshot.docs;
     for (var terminalDoc in terminalDocs) {
-      final CollectionReference requestColRef = terminalDoc.reference.collection('requests');
-      final QuerySnapshot qs = await requestColRef.get();
-      final List<QueryDocumentSnapshot> requestDocs = qs.docs;
-      for (var req in requestDocs) {
-        requests.add(Request(requestTime: req['request_time']));
+      final int terminalID = terminalDoc['terminal_id'];
+
+      if (stationName == routeFromTerminal && !terminalID.toString().startsWith('1000')) {
+        final CollectionReference requestColRef = terminalDoc.reference.collection('requests');
+        final QuerySnapshot qs = await requestColRef.get();
+        final List<QueryDocumentSnapshot> requestDocs = qs.docs;
+        for (var req in requestDocs) {
+          requests.add(Request(requestTime: req['request_time']));
+        }
+      }
+      if (stationName == routeToTerminal && terminalID.toString().startsWith('1000')) {
+        final CollectionReference requestColRef = terminalDoc.reference.collection('requests');
+        final QuerySnapshot qs = await requestColRef.get();
+        final List<QueryDocumentSnapshot> requestDocs = qs.docs;
+        for (var req in requestDocs) {
+          requests.add(Request(requestTime: req['request_time']));
+        }
       }
     }
     final times = _getAllRequestTimesInMillisecondsSinceEpoch(requests);
@@ -227,11 +260,15 @@ class FirestoreManager {
     List<Request> terminalRequests = [];
     List<String> routeRefs = [];
     List<QueryDocumentSnapshot> stationRouteDocs = [];
+    String stationName = '';
+    List<String> fromTerminals = [];
+    List<String> toTerminals = [];
     final CollectionReference stationColRef = _db.collection('stations');
     final QuerySnapshot stationQuerySnapshot = await stationColRef.get();
     final List<QueryDocumentSnapshot> stationDocs = stationQuerySnapshot.docs;
     for (var stationDoc in stationDocs) {
       if (stationDoc['station_id'].toString() == stationID) {
+        stationName = stationDoc['station_name'];
         for (var ref in stationDoc['route_list']) {
           routeRefs.add(ref);
         }
@@ -249,31 +286,65 @@ class FirestoreManager {
       }
     }
     for (var stationRouteDoc in stationRouteDocs) {
+      fromTerminals.add(stationRouteDoc['from_terminal']);
+      toTerminals.add(stationRouteDoc['to_terminal']);
+    }
+    for (var stationRouteDoc in stationRouteDocs) {
       final CollectionReference terminalColRef = stationRouteDoc.reference.collection('terminals');
       final QuerySnapshot querySnapshot = await terminalColRef.get();
       final List<QueryDocumentSnapshot> terminalDocs = querySnapshot.docs;
 
       for (var terminalDoc in terminalDocs) {
-        final CollectionReference requestColRef = terminalDoc.reference.collection('requests');
-        final QuerySnapshot querySnapshot = await requestColRef.get();
-        final List<QueryDocumentSnapshot> requestDocs = querySnapshot.docs;
-        terminalRequests = await _getRequestsPerTerminal(stationRouteDoc.id, terminalDoc.id);
-        final bool exist = _containsId(terminals, terminalDoc['terminal_id']);
-        if (!exist) {
-          terminals.add(Terminal(
-            terminalID: terminalDoc['terminal_id'],
-            terminalName: terminalDoc['terminal_name'],
-            terminalLocation: TerminalLocation(
-              latitude: terminalDoc['terminal_location']['terminal_latitude'],
-              longitude: terminalDoc['terminal_location']['terminal_longitude'],
-            ),
-            requests: terminalRequests,
-          ));
+        final int terminalID = terminalDoc['terminal_id'];
+        final bool isStationFromTerminal = fromTerminals.contains(stationName);
+        final bool isStationToTerminal = toTerminals.contains(stationName);
+        if (isStationFromTerminal && !terminalID.toString().startsWith('1000')) {
+          final CollectionReference requestColRef = terminalDoc.reference.collection('requests');
+          final QuerySnapshot querySnapshot = await requestColRef.get();
+          final List<QueryDocumentSnapshot> requestDocs = querySnapshot.docs;
+          terminalRequests = await _getRequestsPerTerminal(stationRouteDoc.id, terminalDoc.id);
+          final bool exist = _containsId(terminals, terminalDoc['terminal_id']);
+          if (!exist) {
+            terminals.add(
+              Terminal(
+                terminalID: terminalDoc['terminal_id'],
+                terminalName: terminalDoc['terminal_name'],
+                terminalLocation: TerminalLocation(
+                  latitude: terminalDoc['terminal_location']['terminal_latitude'],
+                  longitude: terminalDoc['terminal_location']['terminal_longitude'],
+                ),
+                requests: terminalRequests,
+              ),
+            );
+          }
+          for (var requestDoc in requestDocs) {
+            requests.add(Request(
+              requestTime: requestDoc['request_time'],
+            ));
+          }
         }
-        for (var requestDoc in requestDocs) {
-          requests.add(Request(
-            requestTime: requestDoc['request_time'],
-          ));
+        if (isStationToTerminal && terminalID.toString().startsWith('1000')) {
+          final CollectionReference requestColRef = terminalDoc.reference.collection('requests');
+          final QuerySnapshot querySnapshot = await requestColRef.get();
+          final List<QueryDocumentSnapshot> requestDocs = querySnapshot.docs;
+          terminalRequests = await _getRequestsPerTerminal(stationRouteDoc.id, terminalDoc.id);
+          final bool exist = _containsId(terminals, terminalDoc['terminal_id']);
+          if (!exist) {
+            terminals.add(Terminal(
+              terminalID: terminalDoc['terminal_id'],
+              terminalName: terminalDoc['terminal_name'],
+              terminalLocation: TerminalLocation(
+                latitude: terminalDoc['terminal_location']['terminal_latitude'],
+                longitude: terminalDoc['terminal_location']['terminal_longitude'],
+              ),
+              requests: terminalRequests,
+            ));
+          }
+          for (var requestDoc in requestDocs) {
+            requests.add(Request(
+              requestTime: requestDoc['request_time'],
+            ));
+          }
         }
       }
       List<String> requestTimes = _getAllRequestTimesInMillisecondsSinceEpoch(requests);
